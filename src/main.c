@@ -2,17 +2,13 @@
 #include <stdint.h>
 
 extern void initialise_monitor_handles(void);
-uint32_t count = 0;
 
 int main() 
 {
+    // For debugging purposes
     initialise_monitor_handles();
 
-    while (1)
-    {
-        printf("[%ld]Hello, World!\n", ++count);
-        for (uint32_t i = 0; i < 1000000; i++);
-    }
+    while (1);
 
     return 0;
 }

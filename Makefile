@@ -56,7 +56,7 @@ clean:
 	rm -rf $(BUILD_DIR) image 
 
 load:
-	openocd -f /opt/homebrew/share/openocd/scripts/board/stm32f4discovery.cfg
+	openocd -f ./misc/openocd/board_cfg/stm32f4discovery.cfg
 
 .PHONY: all clean load image_dir copy_image semi copy_image_sh
 
