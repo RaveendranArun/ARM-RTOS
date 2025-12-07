@@ -1,7 +1,7 @@
 
 CC=arm-none-eabi-gcc
 MACH=cortex-m4
-CFLAGS= -mcpu=$(MACH) -mthumb -mfloat-abi=soft -std=gnu11 -Wall -O0
+CFLAGS= -mcpu=$(MACH) -mthumb -mfloat-abi=soft -std=gnu11 -Wall -O0 -g3 -O0 -ffreestanding -fno-builtin
 LDFLAGS= -mcpu=$(MACH) -mthumb -mfloat-abi=soft --specs=nano.specs -T linker/stm32_ls.ld -Wl,-Map=build/final.map
 LDFLAGS_SH= -mcpu=$(MACH) -mthumb -mfloat-abi=soft --specs=rdimon.specs -T linker/stm32_ls.ld -Wl,-Map=build/final_sh.map
 
