@@ -15,7 +15,7 @@ BUILD_DIR = build
 INCLUDES = -I$(INCLUDE_DIR)
 
 SOURCES = $(SRC_DIR)/main.c $(STARTUP_DIR)/stm32_startup.c $(SRC_DIR)/syscalls.c
-SOURCES_SEMI = $(SRC_DIR)/main.c $(STARTUP_DIR)/stm32_startup.c
+SOURCES_SEMI = $(SRC_DIR)/main.c $(STARTUP_DIR)/stm32_startup.c $(SRC_DIR)/led.c
 
 OBJECTS = $(patsubst %.c,$(BUILD_DIR)/%.o,$(notdir $(SOURCES)))
 OBJECTS_SEMI = $(patsubst %.c,$(BUILD_DIR)/%.o,$(notdir $(SOURCES_SEMI)))

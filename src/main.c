@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include "main.h"
+#include "led.h"
 
 extern void initialise_monitor_handles(void);
 
@@ -17,16 +18,20 @@ void switch_sp_to_psp(void);
 uint32_t get_psp_value(void);
 void save_psp_value(uint32_t current_psp_value);
 void update_next_task(void);
+void task_delay(uint32_t tick_count);
 
-uint32_t psp_of_tasks[MAX_TASKS] = {TASK1_STACK_START,
-                                   TASK2_STACK_START,
-                                   TASK3_STACK_START,
-                                   TASK4_STACK_START};
+uint8_t current_task = 1;       // Index of the current running task
+uint32_t global_tick_count = 0; // Global tick count for the system
 
-uint32_t task_handlers[MAX_TASKS];
+typedef struct
+{
+    uint32_t psp_value;
+    uint32_t block_count;
+    uint8_t current_state;
+    void (*task_handler)(void);
+} TCB_t;
 
-uint8_t current_task = 0; //Task1 is the first task to run
-
+TCB_t user_tasks[MAX_TASKS];
 
 int main(void) 
 {
@@ -38,13 +43,10 @@ int main(void)
     // Initialize the scheduler task stack
     init_scheduler_task(SCHED_STACK_START);
 
-    task_handlers[0] = (uint32_t)task1_handler;
-    task_handlers[1] = (uint32_t)task2_handler;
-    task_handlers[2] = (uint32_t)task3_handler;
-    task_handlers[3] = (uint32_t)task4_handler;
-
     // Initialize task stacks
     init_tasks_stack();
+
+    led_init_all(); // Initialize all LEDs;
 
     // Initialize SysTick timer for generating periodic interrupts (before PSP switch)
     init_systick_timer(TICK_HZ);
@@ -60,12 +62,24 @@ int main(void)
     return 0;
 }
 
+void idle_task()
+{
+    while (1)
+    {
+        // Idle task does nothing, just loops
+    }
+}
+
 void task1_handler(void)
 {
     // This is Task 1 handler definition
     while (1)
     {
         printf("Task 1 is running\n");
+        led_on(LED_GREEN);
+        task_delay(1000);
+        led_off(LED_GREEN);
+        task_delay(1000);
     }
 }
 
@@ -75,6 +89,10 @@ void task2_handler(void)
     while (1)
     {
         printf("Task 2 is running\n");
+        led_on(LED_ORANGE);
+        task_delay(500);
+        led_off(LED_ORANGE);
+        task_delay(500);
     }
 }
 
@@ -84,6 +102,10 @@ void task3_handler(void)
     while (1)
     {
         printf("Task 3 is running\n");
+        led_on(LED_BLUE);
+        task_delay(250);
+        led_off(LED_BLUE);
+        task_delay(250);
     }
 }
 
@@ -93,6 +115,10 @@ void task4_handler(void)
     while (1)
     {
         printf("Task 4 is running\n");
+        led_on(LED_RED);
+        task_delay(125);
+        led_off(LED_RED);
+        task_delay(125);
     }
 }
 
@@ -133,15 +159,35 @@ __attribute__((naked)) void init_scheduler_task(uint32_t sched_top_of_stack)
     __asm volatile ("BX LR");       // Return from function call, BX will copy the value of LR to PC
 }
 
+
+
 void init_tasks_stack(void)
 {
+    user_tasks[0].current_state = TASK_READY_STATE;
+    user_tasks[1].current_state = TASK_READY_STATE;
+    user_tasks[2].current_state = TASK_READY_STATE;
+    user_tasks[3].current_state = TASK_READY_STATE;
+    user_tasks[4].current_state = TASK_READY_STATE;
+
+    user_tasks[0].psp_value = IDLE_STACK_START;
+    user_tasks[1].psp_value = TASK1_STACK_START;
+    user_tasks[2].psp_value = TASK2_STACK_START;
+    user_tasks[3].psp_value = TASK3_STACK_START;
+    user_tasks[4].psp_value = TASK4_STACK_START;
+
+    user_tasks[0].task_handler = idle_task;
+    user_tasks[1].task_handler = task1_handler;
+    user_tasks[2].task_handler = task2_handler;
+    user_tasks[3].task_handler = task3_handler;
+    user_tasks[4].task_handler = task4_handler;
+
     for(uint32_t i = 0; i < MAX_TASKS; ++i)
     {
-        uint32_t* pPSP = (uint32_t* )(psp_of_tasks[i]);
+        uint32_t* pPSP = (uint32_t* )(user_tasks[i].psp_value);
 
         // Hardware-stacked frame (built so first exception return can start the task)
         *(--pPSP) = 0x01000000;       // xPSR with T-bit set (Thumb state)
-        *(--pPSP) = task_handlers[i]; // PC
+        *(--pPSP) = (uint32_t)(user_tasks[i].task_handler); // PC
         *(--pPSP) = 0xFFFFFFFD;       // LR: return to Thread mode, PSP
         *(--pPSP) = 0;                // R12
         *(--pPSP) = 0;                // R3
@@ -155,7 +201,7 @@ void init_tasks_stack(void)
             *(--pPSP) = 0;
         }
 
-        psp_of_tasks[i] = (uint32_t)pPSP; // Update PSP for the task
+        user_tasks[i].psp_value = (uint32_t)pPSP; // Update PSP for the task
     }
 }
 
@@ -171,17 +217,33 @@ void enable_processor_faults(void)
 
 uint32_t get_psp_value(void)
 {
-    return psp_of_tasks[current_task];
+    return user_tasks[current_task].psp_value;
 }
 
 void save_psp_value(uint32_t current_psp_value)
 {
-    psp_of_tasks[current_task] = current_psp_value;
+    user_tasks[current_task].psp_value = current_psp_value;
 }
 
 void update_next_task(void)
 {
-    current_task = (current_task + 1) % MAX_TASKS;
+    int state = TASK_BLOCKED_STATE;
+
+    for (uint32_t i = 0; i <MAX_TASKS; ++i)
+    {
+        current_task++;
+        current_task %= MAX_TASKS;
+        state = user_tasks[current_task].current_state;
+        if ((state == TASK_READY_STATE) && (current_task != 0))
+        {
+            break;
+        }
+    }
+    if (state != TASK_READY_STATE)
+    {
+        current_task = 0; // Switch to idle task if no other task is ready
+    }
+
 }
 
 __attribute__((naked)) void switch_sp_to_psp(void)
@@ -200,10 +262,33 @@ __attribute__((naked)) void switch_sp_to_psp(void)
 	__asm volatile ("BX LR");
 }
 
-/*
- * This is the SysTick interrupt handler 
- */
-__attribute__((naked)) void SysTick_Handler(void)
+void schedule(void)
+{
+    // Trigger PendSV exception for context switching
+    uint32_t* pICSR = (uint32_t* )0xE000ED04; // Interrupt Control and State Register
+    *pICSR |= (1 << 28); // Set PendSV set-pending bit
+}
+
+void task_delay(uint32_t tick_count)
+{
+    //disable interrupts
+    INTERRUPT_DISABLE();
+
+    if (current_task == 0)
+    {
+        return; // Idle task should not be delayed
+    }
+
+    user_tasks[current_task].block_count = global_tick_count + tick_count;
+    user_tasks[current_task].current_state = TASK_BLOCKED_STATE;
+    schedule();
+
+    //enable interrupts
+    INTERRUPT_ENABLE();
+
+}
+
+__attribute__((naked)) void PendSV_Handler(void)
 {
     /*Save the context of current task */
 
@@ -234,6 +319,38 @@ __attribute__((naked)) void SysTick_Handler(void)
 	__asm volatile("POP {LR}");
 
 	__asm volatile("BX LR");
+}
+
+void update_global_tick_count(void)
+{
+    global_tick_count++;
+}
+
+void unblock_tasks(void)
+{
+    for (int i = 1; i < MAX_TASKS; ++i)
+    {
+        if (user_tasks[i].current_state == TASK_BLOCKED_STATE)
+        {
+            if (user_tasks[i].block_count == global_tick_count)
+            {
+                user_tasks[i].current_state = TASK_READY_STATE;
+            }
+        }
+    }
+}
+
+/*
+ * This is the SysTick interrupt handler 
+ */
+void SysTick_Handler(void)
+{
+    uint32_t* pICSR = (uint32_t* )0xE000ED04; // Interrupt Control and State Register
+
+    update_global_tick_count();
+    unblock_tasks();    
+    // Trigger PendSV exception for context switching
+    *pICSR |= (1 << 28); // Set PendSV set-pending bit
 }
 
 void HardFault_Handler(void)
