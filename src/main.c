@@ -26,7 +26,7 @@ uint32_t global_tick_count = 0; // Global tick count for the system
 typedef struct
 {
     uint32_t psp_value;
-    uint32_t block_count;
+    uint32_t block_tick_count;
     uint8_t current_state;
     void (*task_handler)(void);
 } TCB_t;
@@ -128,23 +128,20 @@ void task4_handler(void)
  */
 void init_systick_timer(uint32_t tick_hz)
 {
-    uint32_t* pSRVR = (uint32_t* )0xE000E014; // SysTick Reload Value Register
-    uint32_t* pSCSR = (uint32_t* )0xE000E010; // SysTick Control and Status Register
-
     uint32_t count_value = (SYSTICK_TIM_CLK / tick_hz);
     
     // Clear the current value of the SRVR
-    *pSRVR &= ~(0xFFFFFFFF);
+    SysTick->LOAD &= ~(0xFFFFFFFF);
 
-    // Load the count value into the SRVR
-    *pSRVR = count_value - 1;
+    // 1. Load the count value into the SRVR
+    SysTick->LOAD = count_value - 1;
 
-    // Configure and start the SysTick timer
-    *pSCSR |= (1 << 1); // Enable SysTick exception request
+    // 2. Configure and start the SysTick timer
+    SysTick->CTRL |= (1 << 1); // Enable SysTick exception request
     
-    // Set the clock source to processor clock, enable SysTick exception and start the timer
-    *pSCSR |= (1 << 2); // SysTick timer clock source as processor clock
-    *pSCSR |= (1 << 0); // Enable the SysTick timer
+    // 3. Set the clock source to processor clock, enable SysTick exception and start the timer
+    SysTick->CTRL |= (1 << 2); // SysTick timer clock source as processor clock
+    SysTick->CTRL |= (1 << 0); // Enable the SysTick timer
 }
 
 /*
@@ -158,8 +155,6 @@ __attribute__((naked)) void init_scheduler_task(uint32_t sched_top_of_stack)
     __asm volatile ("MSR MSP, %0" : : "r" (sched_top_of_stack) : ); // Set MSP to scheduler stack top
     __asm volatile ("BX LR");       // Return from function call, BX will copy the value of LR to PC
 }
-
-
 
 void init_tasks_stack(void)
 {
@@ -207,12 +202,10 @@ void init_tasks_stack(void)
 
 void enable_processor_faults(void)
 {
-    uint32_t* pSHCSR = (uint32_t* )0xE000ED24; // System Handler Control and State Register
-
     // Enable MemManage, BusFault and UsageFault exceptions
-    *pSHCSR |= (1 << 16); // MemManage fault enable
-    *pSHCSR |= (1 << 17); // BusFault enable
-    *pSHCSR |= (1 << 18); // UsageFault enable
+    SCB->SHCSR |= (SCB_SHCSR_MEMFAULTENA_Msk | 
+                   SCB_SHCSR_BUSFAULTENA_Msk | 
+                   SCB_SHCSR_USGFAULTENA_Msk);
 }
 
 uint32_t get_psp_value(void)
@@ -265,8 +258,7 @@ __attribute__((naked)) void switch_sp_to_psp(void)
 void schedule(void)
 {
     // Trigger PendSV exception for context switching
-    uint32_t* pICSR = (uint32_t* )0xE000ED04; // Interrupt Control and State Register
-    *pICSR |= (1 << 28); // Set PendSV set-pending bit
+    SCB->ICSR |= SCB_ICSR_PENDSVSET_Msk; // Set PendSV set-pending bit
 }
 
 void task_delay(uint32_t tick_count)
@@ -279,7 +271,7 @@ void task_delay(uint32_t tick_count)
         return; // Idle task should not be delayed
     }
 
-    user_tasks[current_task].block_count = global_tick_count + tick_count;
+    user_tasks[current_task].block_tick_count = global_tick_count + tick_count;
     user_tasks[current_task].current_state = TASK_BLOCKED_STATE;
     schedule();
 
@@ -332,7 +324,7 @@ void unblock_tasks(void)
     {
         if (user_tasks[i].current_state == TASK_BLOCKED_STATE)
         {
-            if (user_tasks[i].block_count == global_tick_count)
+            if (user_tasks[i].block_tick_count == global_tick_count)
             {
                 user_tasks[i].current_state = TASK_READY_STATE;
             }
@@ -345,12 +337,14 @@ void unblock_tasks(void)
  */
 void SysTick_Handler(void)
 {
-    uint32_t* pICSR = (uint32_t* )0xE000ED04; // Interrupt Control and State Register
-
+    // 1. Update the global tick count
     update_global_tick_count();
-    unblock_tasks();    
-    // Trigger PendSV exception for context switching
-    *pICSR |= (1 << 28); // Set PendSV set-pending bit
+
+    // 2. Unblock any tasks whose delay has expired
+    unblock_tasks(); 
+
+    // 3. Trigger PendSV exception for context switching
+    SCB->ICSR |= SCB_ICSR_PENDSVSET_Msk; // Set PendSV set-pending bit
 }
 
 void HardFault_Handler(void)

@@ -1,7 +1,7 @@
 
 CC=arm-none-eabi-gcc
 MACH=cortex-m4
-CFLAGS= -mcpu=$(MACH) -mthumb -mfloat-abi=soft -std=gnu11 -Wall -O0 -g3 -O0 -ffreestanding -fno-builtin
+CFLAGS= -mcpu=$(MACH) -mthumb -mfloat-abi=soft -std=gnu11 -Wall -O0 -g3 -O0 -ffreestanding -fno-builtin -DSTM32F407xx
 LDFLAGS= -mcpu=$(MACH) -mthumb -mfloat-abi=soft --specs=nano.specs -T linker/stm32_ls.ld -Wl,-Map=build/final.map
 LDFLAGS_SH= -mcpu=$(MACH) -mthumb -mfloat-abi=soft --specs=rdimon.specs -T linker/stm32_ls.ld -Wl,-Map=build/final_sh.map
 
@@ -11,11 +11,17 @@ SRC_DIR = src
 STARTUP_DIR = startup
 INCLUDE_DIR = include
 BUILD_DIR = build
+CMSIS_DEVICE_DIR = ThirdParty/CMSIS/Device/ST/STM32F4xx
+CMSIS_CORE_DIR = ThirdParty/CMSIS/Core
 
-INCLUDES = -I$(INCLUDE_DIR)
+INCLUDES = -I$(INCLUDE_DIR) \
+           -I$(CMSIS_DEVICE_DIR)/Include \
+           -I$(CMSIS_CORE_DIR)/Include
 
-SOURCES = $(SRC_DIR)/main.c $(STARTUP_DIR)/stm32_startup.c $(SRC_DIR)/syscalls.c
-SOURCES_SEMI = $(SRC_DIR)/main.c $(STARTUP_DIR)/stm32_startup.c $(SRC_DIR)/led.c
+SOURCES = $(SRC_DIR)/main.c $(STARTUP_DIR)/stm32_startup.c $(SRC_DIR)/syscalls.c \
+          $(CMSIS_DEVICE_DIR)/Source/system_stm32f4xx.c
+SOURCES_SEMI = $(SRC_DIR)/main.c $(STARTUP_DIR)/stm32_startup.c $(SRC_DIR)/led.c \
+               $(CMSIS_DEVICE_DIR)/Source/system_stm32f4xx.c
 
 OBJECTS = $(patsubst %.c,$(BUILD_DIR)/%.o,$(notdir $(SOURCES)))
 OBJECTS_SEMI = $(patsubst %.c,$(BUILD_DIR)/%.o,$(notdir $(SOURCES_SEMI)))
@@ -44,6 +50,9 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
 	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
 $(BUILD_DIR)/%.o: $(STARTUP_DIR)/%.c
+	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
+
+$(BUILD_DIR)/%.o: $(CMSIS_DEVICE_DIR)/Source/%.c
 	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
 $(BUILD_DIR)/final.elf: $(OBJECTS)

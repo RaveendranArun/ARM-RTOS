@@ -15,6 +15,7 @@ void led_init_all(void)
 
 
 	*pRccAhb1enr |= ( 1 << 3);
+	
 	//configure LED_GREEN
 	*pGpiodModeReg |= ( 1 << (2 * LED_GREEN));
 	*pGpiodModeReg |= ( 1 << (2 * LED_ORANGE));

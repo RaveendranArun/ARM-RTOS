@@ -1,6 +1,8 @@
 #ifndef __MAIN_H__
 #define __MAIN_H__
 
+#include "stm32f407xx.h"  // STM32F407 peripherals
+#include "core_cm4.h"     // Cortex-M4 core functions
 /* STACK memory calculations */
 
 #define SIZE_TASK_STACK      1024U
